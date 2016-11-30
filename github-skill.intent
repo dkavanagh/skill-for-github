@@ -1,0 +1,10 @@
+{
+  "intents": [
+    {
+      "intent": "GetNotifications"
+    },
+    {
+      "intent": "GetRepos"
+    }
+  ]
+}
