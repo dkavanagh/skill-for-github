@@ -70,7 +70,7 @@ def get_notifications(intent, session):
     card_title = intent['name']
     session_attributes = {}
     reprompt_text = ''
-    should_end_session = False
+    should_end_session = True
 
     g = Github(session['user']['accessToken'])
     events = g.get_user().get_notifications()
@@ -86,10 +86,8 @@ def get_notifications(intent, session):
             'You have {0} notifications.'.format(num_events) + ', here are the first 5. ' + \
             ', '.join(event_strings)
         reprompt_text = ''
-        should_end_session = True
     else:
         speech_output = "Nothing new since last time you asked."
-        should_end_session = False
     return build_response(session_attributes, build_speechlet_response(
         card_title, speech_output, reprompt_text, should_end_session))
 
@@ -109,6 +107,7 @@ def get_repos(intent, session):
         num_repos += 1
         if num_repos >= index and num_repos < (index + 5):
             repo_strings.append(rep.name)
+    # TODO: handle end of list, by ending the session
     if num_repos > 0:
         if index == 0:
             speech_output = 'You have {0} repos. The first 5 are '.format(num_repos) + \
@@ -124,9 +123,6 @@ def get_repos(intent, session):
         speech_output = "You don't have any repos in this account."
         should_end_session = True
 
-    # Setting reprompt_text to None signifies that we do not want to reprompt
-    # the user. If the user does not respond or says something that is not
-    # understood, the session will end.
     return build_response(session_attributes, build_speechlet_response(
         intent['name'], speech_output, reprompt_text, should_end_session))
 
@@ -142,9 +138,6 @@ def get_acct_info(intent, session):
         'You are {0}. You have {1} public repose, {2} followers and are following {3}.'. \
         format(u.name, u.public_repos, u.followers, u.following)
 
-    # Setting reprompt_text to None signifies that we do not want to reprompt
-    # the user. If the user does not respond or says something that is not
-    # understood, the session will end.
     return build_response(session_attributes, build_speechlet_response(
         intent['name'], speech_output, reprompt_text, should_end_session))
 
@@ -152,6 +145,7 @@ def get_acct_info(intent, session):
 def get_orgs(intent, session):
     session_attributes = {}
     reprompt_text = None
+    should_end_session = True
 
     g = Github(session['user']['accessToken'])
     orgs = g.get_user().get_orgs()
@@ -161,17 +155,11 @@ def get_orgs(intent, session):
         num_orgs += 1
         org_strings.append(org.url[org.url.rfind('/')+1:])
     if num_orgs > 0:
-        speech_output = 'You have {0} orgs.'.format(num_orgs)
         speech_output = \
             'You belong to these organizations. ' + ','.join(org_strings)
-        should_end_session = True
     else:
-        speech_output = "You don't have any orgs in this account."
-        should_end_session = False
+        speech_output = "You don't have any organizations in this account."
 
-    # Setting reprompt_text to None signifies that we do not want to reprompt
-    # the user. If the user does not respond or says something that is not
-    # understood, the session will end.
     return build_response(session_attributes, build_speechlet_response(
         intent['name'], speech_output, reprompt_text, should_end_session))
 
