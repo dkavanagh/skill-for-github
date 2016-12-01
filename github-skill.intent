@@ -5,6 +5,15 @@
     },
     {
       "intent": "GetRepos"
+    },
+    {
+      "intent": "GetOrganizations"
+    },
+    {
+      "intent": "GetAcctInfo"
+    },
+    {
+      "intent": "AMAZON.YesIntent"
     }
   ]
 }

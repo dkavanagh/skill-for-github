@@ -1,11 +1,3 @@
-"""
-This sample demonstrates a simple skill built with the Amazon Alexa Skills Kit.
-The Intent Schema, Custom Slots, and Sample Utterances for this skill, as well
-as testing instructions are located at http://amzn.to/1LzFrj6
-
-For additional samples, visit the Alexa Skills Kit Getting Started guide at
-http://amzn.to/1LGWsLG
-"""
 
 from __future__ import print_function
 from github import Github
@@ -51,12 +43,12 @@ def get_welcome_response():
 
     session_attributes = {}
     card_title = "Welcome"
-    speech_output = "I connect to your github account. " \
+    speech_output = "I connect to your git hub account. " \
                     "ask me to list your repos, " \
                     "or what's new."
     # If the user either does not reply to the welcome message or says something
     # that is not understood, they will be prompted again with this text.
-    reprompt_text = "Please as what's new."
+    reprompt_text = "Please ask what's new."
     should_end_session = False
     return build_response(session_attributes, build_speechlet_response(
         card_title, speech_output, reprompt_text, should_end_session))
@@ -64,16 +56,11 @@ def get_welcome_response():
 
 def handle_session_end_request():
     card_title = "Session Ended"
-    speech_output = "Thank you for trying the Alexa Skills Kit sample. " \
-                    "Have a nice day! "
+    speech_output = "OK"
     # Setting this to true ends the session and exits the skill.
     should_end_session = True
     return build_response({}, build_speechlet_response(
         card_title, speech_output, None, should_end_session))
-
-
-def create_favorite_color_attributes(favorite_color):
-    return {"favoriteColor": favorite_color}
 
 
 def get_notifications(intent, session):
@@ -82,15 +69,24 @@ def get_notifications(intent, session):
 
     card_title = intent['name']
     session_attributes = {}
+    reprompt_text = ''
     should_end_session = False
 
     g = Github(session['user']['accessToken'])
-    events = g.get_user().get_events()
+    events = g.get_user().get_notifications()
+    num_events = 0
+    event_strings = []
+    for evt in events:
+        num_events += 1
+        if num_events < 5:
+            event_strings.append(evt.subject.type+' for '+evt.repository.name+', '+evt.subject.title)
 
-    if len(events) > 0:
-        speech_output = 'You have {0} events.'.format(len(events))
-        reprompt_text = 'Should I list them?'
-        should_end_session = False
+    if num_events > 0:
+        speech_output = \
+            'You have {0} notifications.'.format(num_events) + ', here are the first 5. ' + \
+            ', '.join(event_strings)
+        reprompt_text = ''
+        should_end_session = True
     else:
         speech_output = "Nothing new since last time you asked."
         should_end_session = False
@@ -104,17 +100,73 @@ def get_repos(intent, session):
 
     g = Github(session['user']['accessToken'])
     repos = g.get_user().get_repos()
-    print('got some repos '+str(repos))
+    index = 0
+    if 'attributes' in session and 'index' in session['attributes']:
+        index = int(session['attributes']['index'])
     num_repos = 0
+    repo_strings = []
     for rep in repos:
-        print('the repo is '+str(rep))
         num_repos += 1
+        if num_repos >= index and num_repos < (index + 5):
+            repo_strings.append(rep.name)
     if num_repos > 0:
-        speech_output = 'You have {0} repos.'.format(num_repos)
-        reprompt_text = 'Should I list them?'
+        if index == 0:
+            speech_output = 'You have {0} repos. The first 5 are '.format(num_repos) + \
+                ', '.join(repo_strings) + 'Shall I continue?'
+        else:
+            speech_output = \
+                ','.join(repo_strings) + ' Shall I continue?'
+        reprompt_text = 'Should I list more?'
         should_end_session = False
+        session_attributes['index'] = index + 5
+        session_attributes['intent'] = 'GetRepos'
     else:
         speech_output = "You don't have any repos in this account."
+        should_end_session = True
+
+    # Setting reprompt_text to None signifies that we do not want to reprompt
+    # the user. If the user does not respond or says something that is not
+    # understood, the session will end.
+    return build_response(session_attributes, build_speechlet_response(
+        intent['name'], speech_output, reprompt_text, should_end_session))
+
+
+def get_acct_info(intent, session):
+    session_attributes = {}
+    reprompt_text = None
+    should_end_session = True
+
+    g = Github(session['user']['accessToken'])
+    u = g.get_user()
+    speech_output = \
+        'You are {0}. You have {1} public repose, {2} followers and are following {3}.'. \
+        format(u.name, u.public_repos, u.followers, u.following)
+
+    # Setting reprompt_text to None signifies that we do not want to reprompt
+    # the user. If the user does not respond or says something that is not
+    # understood, the session will end.
+    return build_response(session_attributes, build_speechlet_response(
+        intent['name'], speech_output, reprompt_text, should_end_session))
+
+
+def get_orgs(intent, session):
+    session_attributes = {}
+    reprompt_text = None
+
+    g = Github(session['user']['accessToken'])
+    orgs = g.get_user().get_orgs()
+    num_orgs = 0
+    org_strings = []
+    for org in orgs:
+        num_orgs += 1
+        org_strings.append(org.url[org.url.rfind('/')+1:])
+    if num_orgs > 0:
+        speech_output = 'You have {0} orgs.'.format(num_orgs)
+        speech_output = \
+            'You belong to these organizations. ' + ','.join(org_strings)
+        should_end_session = True
+    else:
+        speech_output = "You don't have any orgs in this account."
         should_end_session = False
 
     # Setting reprompt_text to None signifies that we do not want to reprompt
@@ -157,10 +209,19 @@ def on_intent(intent_request, session):
     intent_name = intent_request['intent']['name']
 
     # Dispatch to your skill's intent handlers
-    if intent_name == "GetNotifications":
+    if intent_name == "AMAZON.YesIntent":
+        if session['attributes']['intent'] == 'GetRepos':
+            return get_repos(intent, session)
+    elif intent_name == "GetNotifications":
         return get_notifications(intent, session)
     elif intent_name == "GetRepos":
         return get_repos(intent, session)
+    elif intent_name == "GetOrganizations":
+        return get_orgs(intent, session)
+    elif intent_name == "GetAcctInfo":
+        return get_acct_info(intent, session)
+    elif intent_name == "AMAZON.NoIntent":
+        return handle_session_end_request()
     elif intent_name == "AMAZON.HelpIntent":
         return get_welcome_response()
     elif intent_name == "AMAZON.CancelIntent" or intent_name == "AMAZON.StopIntent":
