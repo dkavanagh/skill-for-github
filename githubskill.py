@@ -26,6 +26,13 @@ def build_speechlet_response(title, output, reprompt_text, should_end_session):
     }
 
 
+def build_directive_response(directives):
+    return {
+        'shouldEndSession': False,
+        'directives': [directives]
+    }
+
+
 def build_response(session_attributes, speechlet_response):
     return {
         'version': '1.0',
@@ -97,7 +104,7 @@ def get_repos(intent, session):
     reprompt_text = None
 
     g = Github(session['user']['accessToken'])
-    repos = g.get_user().get_repos()
+    repos = g.get_user().get_repos(sort='pushed')
     index = 0
     if 'attributes' in session and 'index' in session['attributes']:
         index = int(session['attributes']['index'])
@@ -105,16 +112,14 @@ def get_repos(intent, session):
     repo_strings = []
     for rep in repos:
         num_repos += 1
-        if num_repos >= index and num_repos < (index + 5):
-            repo_strings.append(rep.name)
+        if num_repos >= index and num_repos < (index + 4):
+            repo_strings.append(str(num_repos) + ', ' + rep.name)
     # TODO: handle end of list, by ending the session
     if num_repos > 0:
         if index == 0:
-            speech_output = 'You have {0} repos. The first 5 are '.format(num_repos) + \
-                ', '.join(repo_strings) + 'Shall I continue?'
-        else:
-            speech_output = \
-                ','.join(repo_strings) + ' Shall I continue?'
+            speech_output = 'You have {0} repos. The top 3 are '.format(num_repos)
+        speech_output = speech_output + \
+            ','.join(repo_strings) + ', Select a number of say "more".'
         reprompt_text = 'Should I list more?'
         should_end_session = False
         session_attributes['index'] = index + 5
@@ -164,6 +169,43 @@ def get_orgs(intent, session):
         intent['name'], speech_output, reprompt_text, should_end_session))
 
 
+def merge_pr(intent, session, dialog_state):
+    filled_slots = delegate_slot_collection(intent, dialog_state)
+    if intent != filled_slots:
+        return filled_slots
+
+    session_attributes = {}
+    reprompt_text = None
+    should_end_session = True
+
+    repo_name = filled_slots['REPONAME']['value']
+    pr_number = filled_slots['PRNUMBER']['value']
+
+    g = Github(session['user']['accessToken'])
+    repo = g.get_repo(repo_name)
+    pr = repo.get_pull(pr_number)
+    if pr.mergable():
+        pr.merge()
+        speech_output = 'pull request ' + pr_number + ' merged.'
+    else:
+        speech_output = 'pull request ' + pr_number + ' cannot be merged.'
+
+    return build_response(session_attributes, build_speechlet_response(
+        intent['name'], speech_output, reprompt_text, should_end_session))
+
+
+def delegate_slot_collection(intent, dialog_state):
+    print('dialog state = '+dialog_state)
+    if dialog_state == 'STARTED':
+        return build_response({}, build_directive_response({'type': 'Dialog.Delegate'}))
+        # emit(':delegate', intent)
+    elif dialog_state != 'COMPLETED':
+        return build_response({}, build_directive_response({'type': 'Dialog.Delegate'}))
+        # emit(':delegate')
+    else:
+        return intent
+
+
 # --------------- Events ------------------
 
 def on_session_started(session_started_request, session):
@@ -208,6 +250,8 @@ def on_intent(intent_request, session):
         return get_orgs(intent, session)
     elif intent_name == "GetAcctInfo":
         return get_acct_info(intent, session)
+    elif intent_name == "MergePullRequest":
+        return merge_pr(intent, session, intent_request.get('dialogState', None))
     elif intent_name == "AMAZON.NoIntent":
         return handle_session_end_request()
     elif intent_name == "AMAZON.HelpIntent":
